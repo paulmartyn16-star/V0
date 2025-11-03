@@ -10,7 +10,6 @@ const Strategy = require("passport-discord").Strategy;
 const bodyParser = require("body-parser");
 const path = require("path");
 const fs = require("fs");
-const fetch = require("node-fetch");
 const {
   Client,
   GatewayIntentBits,
@@ -39,8 +38,6 @@ const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const CLIENT_SECRET = process.env.CLIENT_SECRET;
 const FOOTER_ICON = process.env.FOOTER_ICON;
-const CATEGORY_ID = process.env.CATEGORY_ID;
-const WELCOME_CHANNEL_ID = process.env.WELCOME_CHANNEL_ID;
 const RESTOCK_ROLE_ID = process.env.RESTOCK_ROLE_ID;
 const DASHBOARD_PORT = process.env.PORT || 3000;
 const SERVER_NAME = "V0 Carries";
@@ -64,7 +61,6 @@ app.use(
 // === DISCORD OAUTH2 LOGIN ===
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((obj, done) => done(null, obj));
-
 passport.use(
   new Strategy(
     {
@@ -120,7 +116,7 @@ let rr = fs.existsSync(rrFile)
 // === DASHBOARD ===
 app.get("/dashboard", isAuthenticated, async (req, res) => {
   const guild = client.guilds.cache.find((g) => g.name === SERVER_NAME);
-  if (!guild) return res.send("❌ Server not found. Is the bot in your server?");
+  if (!guild) return res.send("❌ Server not found.");
   const channels = guild.channels.cache.filter((ch) => ch.type === 0);
   const roles = guild.roles.cache.filter((r) => r.name !== "@everyone");
   res.render("dashboard", {
@@ -144,7 +140,9 @@ app.post("/send", isAuthenticated, async (req, res) => {
       .setColor(parseInt((color || "#FFD700").replace("#", ""), 16))
       .setFooter({ text: footer || "V0 | Embed System", iconURL: FOOTER_ICON });
     if (restock === "on" && RESTOCK_ROLE_ID)
-      await channel.send({ content: `<@&${RESTOCK_ROLE_ID}> 🔔 **Restock Alert!**` });
+      await channel.send({
+        content: `<@&${RESTOCK_ROLE_ID}> 🔔 **Restock Alert!**`,
+      });
     await channel.send({ embeds: [embed] });
     const guild = client.guilds.cache.find((g) => g.name === SERVER_NAME);
     const channels = guild.channels.cache.filter((ch) => ch.type === 0);
@@ -162,286 +160,234 @@ app.post("/send", isAuthenticated, async (req, res) => {
   }
 });
 
-// === REACTION ROLE CREATION / EDIT / DELETE ===
-app.post("/reactionrole", isAuthenticated, async (req, res) => {
-  const { channelId, title, description, color, footer } = req.body;
-  const pairs = Object.keys(req.body)
-    .filter((k) => k.startsWith("emoji_"))
-    .map((k) => k.split("_")[1])
-    .filter((i) => req.body[`emoji_${i}`] && req.body[`role_${i}`])
-    .map((i) => ({ emoji: req.body[`emoji_${i}`], roleId: req.body[`role_${i}`] }));
-
-  if (!pairs.length) return res.send("❌ No emoji-role pairs.");
-  try {
-    const channel = await client.channels.fetch(channelId);
-    const embed = new EmbedBuilder()
-      .setTitle(title || "Reaction Roles")
-      .setDescription(description || "React below to get roles!")
-      .setColor(parseInt((color || "#FFD700").replace("#", ""), 16))
-      .setFooter({ text: footer || "V0 | Reaction Roles", iconURL: FOOTER_ICON });
-    const msg = await channel.send({ embeds: [embed] });
-    for (const p of pairs) await msg.react(p.emoji);
-
-    rr[msg.id] = { channelId, channelName: channel.name, pairs, embed: { title, description, color, footer } };
-    fs.writeFileSync(rrFile, JSON.stringify(rr, null, 2));
-
-    const guild = client.guilds.cache.find((g) => g.name === SERVER_NAME);
-    const channels = guild.channels.cache.filter((ch) => ch.type === 0);
-    const roles = guild.roles.cache.filter((r) => r.name !== "@everyone");
-    res.render("dashboard", { user: req.user, channels, roles, rrData: rr, message: "✅ Reaction Role created!" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Error creating reaction role");
-  }
-});
-
-app.post("/reactionrole/update", isAuthenticated, async (req, res) => {
-  const { messageId, title, description, color, footer } = req.body;
-  if (!rr[messageId]) return res.send("❌ Unknown message ID.");
-  const data = rr[messageId];
-  const channel = await client.channels.fetch(data.channelId);
-  const msg = await channel.messages.fetch(messageId);
-  const embed = new EmbedBuilder()
-    .setTitle(title || "Reaction Roles")
-    .setDescription(description || "")
-    .setColor(parseInt((color || "#FFD700").replace("#", ""), 16))
-    .setFooter({ text: footer || "V0 | Reaction Roles", iconURL: FOOTER_ICON });
-  await msg.edit({ embeds: [embed] });
-
-  const pairs = Object.keys(req.body)
-    .filter((k) => k.startsWith("emoji_"))
-    .map((k) => k.split("_")[1])
-    .filter((i) => req.body[`emoji_${i}`] && req.body[`role_${i}`])
-    .map((i) => ({ emoji: req.body[`emoji_${i}`], roleId: req.body[`role_${i}`] }));
-
-  data.pairs = pairs;
-  data.embed = { title, description, color, footer };
-  fs.writeFileSync(rrFile, JSON.stringify(rr, null, 2));
-  for (const react of msg.reactions.cache.values()) await react.remove().catch(() => {});
-  for (const p of pairs) await msg.react(p.emoji);
-  res.redirect("/dashboard");
-});
-
-app.post("/reactionrole/delete", isAuthenticated, async (req, res) => {
-  const { messageId } = req.body;
-  if (!rr[messageId]) return res.send("❌ Unknown message ID.");
-  try {
-    const ch = await client.channels.fetch(rr[messageId].channelId);
-    const m = await ch.messages.fetch(messageId);
-    await m.delete();
-    delete rr[messageId];
-    fs.writeFileSync(rrFile, JSON.stringify(rr, null, 2));
-    res.redirect("/dashboard");
-  } catch (e) {
-    console.error(e);
-    res.send("Error deleting message.");
-  }
-});
-
-client.on("messageReactionAdd", async (r, u) => {
-  if (u.bot || !rr[r.message.id]) return;
-  const pair = rr[r.message.id].pairs.find((p) => p.emoji === r.emoji.name);
-  if (!pair) return;
-  const member = await r.message.guild.members.fetch(u.id);
-  await member.roles.add(pair.roleId).catch(() => {});
-});
-client.on("messageReactionRemove", async (r, u) => {
-  if (u.bot || !rr[r.message.id]) return;
-  const pair = rr[r.message.id].pairs.find((p) => p.emoji === r.emoji.name);
-  if (!pair) return;
-  const member = await r.message.guild.members.fetch(u.id);
-  await member.roles.remove(pair.roleId).catch(() => {});
-});
-
 // === DASHBOARD START ===
-app.listen(DASHBOARD_PORT, () => console.log(`🌐 Dashboard running on port ${DASHBOARD_PORT}`));
-
-// === COMMAND HANDLER SETUP ===
-client.commands = new Collection();
-const commandsPath = path.join(__dirname, "commands");
-if (fs.existsSync(commandsPath)) {
-  const commandFiles = fs.readdirSync(commandsPath).filter((file) => file.endsWith(".js"));
-  for (const file of commandFiles) {
-    const command = require(path.join(commandsPath, file));
-    client.commands.set(command.data.name, command);
-  }
-}
+app.listen(DASHBOARD_PORT, () =>
+  console.log(`🌐 Dashboard running on port ${DASHBOARD_PORT}`)
+);
 
 // === BOT READY ===
-client.once("ready", () => {
-  console.log(`✅ Logged in as ${client.user.tag}`);
-});
-
-// === SLASH COMMAND EXECUTION (supports /setuproles etc.) ===
-client.on("interactionCreate", async (interaction) => {
-  try {
-    if (interaction.isAutocomplete()) {
-      const command = client.commands.get(interaction.commandName);
-      if (command?.autocomplete) await command.autocomplete(interaction);
-      return;
-    }
-
-    if (!interaction.isChatInputCommand()) return;
-    const command = client.commands.get(interaction.commandName);
-    if (!command) return;
-
-    await command.execute(interaction);
-  } catch (error) {
-    console.error(error);
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp({ content: "❌ Error executing command.", ephemeral: true });
-    } else {
-      await interaction.reply({ content: "❌ Error executing command.", ephemeral: true });
-    }
-  }
-});
-
-// === Support Ticket System (V0 Carries Style | Fixed Category + await fix) ===
 client.once("ready", async () => {
-  try {
-    const guild = client.guilds.cache.find(g => g.name === SERVER_NAME);
-    if (!guild) return console.log("❌ Server not found for Support Panel.");
+  console.log(`✅ Logged in as ${client.user.tag}`);
 
-    const supportChannel = guild.channels.cache.find(c => c.name === "🎟️・support-ticket");
-    if (!supportChannel) return console.log("❌ Support channel not found.");
+  const guild = client.guilds.cache.find((g) => g.name === SERVER_NAME);
+  if (!guild) return console.log("❌ Server not found.");
 
-    const supportEmbed = new EmbedBuilder()
+  const supportChannel = guild.channels.cache.find(
+    (c) => c.name === "🎟️・support-ticket"
+  );
+  if (supportChannel) {
+    await supportChannel.bulkDelete(10).catch(() => {});
+    const embed = new EmbedBuilder()
       .setColor("#FFD700")
       .setTitle("💎 V0 Support")
       .setDescription(
         "Need help or have a question about carries?\n\n" +
-        "Our support team is here for you! Click the button below to open a private ticket.\n\n" +
-        "⚠️ Only use this for **support-related issues.**"
+          "Our support team is here for you! Click below to open a ticket.\n\n⚠️ Only use this for **support-related issues.**"
       )
       .setFooter({ text: "V0 | Support System", iconURL: FOOTER_ICON });
-
-    const supportBtn = new ActionRowBuilder().addComponents(
+    const btn = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("create_support_ticket")
         .setLabel("🎟️ Create Support Ticket")
         .setStyle(ButtonStyle.Primary)
     );
-
-    await supportChannel.bulkDelete(10).catch(() => {});
-    await supportChannel.send({ embeds: [supportEmbed], components: [supportBtn] });
-
+    await supportChannel.send({ embeds: [embed], components: [btn] });
     console.log("✅ Support panel initialized.");
-  } catch (err) {
-    console.error("❌ Error setting up support panel:", err);
   }
 });
 
+// === INTERACTIONS ===
 client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isButton() || interaction.customId !== "create_support_ticket") return;
+  if (!interaction.isButton()) return;
 
-  const guild = interaction.guild;
-  const user = interaction.user;
+  // === SUPPORT SYSTEM ===
+  if (interaction.customId === "create_support_ticket") {
+    const guild = interaction.guild;
+    const user = interaction.user;
+    const category = guild.channels.cache.find(
+      (c) => c.name.toUpperCase() === "SUPPORT TICKETS" && c.type === 4
+    );
+    if (!category)
+      return interaction.reply({
+        content: "❌ Category SUPPORT TICKETS not found.",
+        ephemeral: true,
+      });
 
-  const category = guild.channels.cache.find(
-    c => c.name.toUpperCase() === "SUPPORT TICKETS" && c.type === 4
-  );
-  if (!category) {
+    const existing = guild.channels.cache.find(
+      (c) =>
+        c.parentId === category.id &&
+        c.name === `ticket-${user.username.toLowerCase()}`
+    );
+    if (existing)
+      return interaction.reply({
+        content: `❌ You already have an open ticket: ${existing}`,
+        ephemeral: true,
+      });
+
+    const ticketChannel = await guild.channels.create({
+      name: `ticket-${user.username}`,
+      type: 0,
+      parent: category.id,
+      permissionOverwrites: [
+        { id: guild.id, deny: ["ViewChannel"] },
+        { id: user.id, allow: ["ViewChannel", "SendMessages", "AttachFiles"] },
+      ],
+    });
+
+    const embed = new EmbedBuilder()
+      .setColor("#FFD700")
+      .setTitle("🎟️ V0 Support Ticket")
+      .setDescription(
+        `Hey ${user}, 👋\n\nPlease describe your issue below. A team member will assist you shortly.\n\nClick 🔒 Close Ticket when you're done.`
+      )
+      .setFooter({ text: "V0 | Support", iconURL: FOOTER_ICON });
+
+    const btns = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("close_ticket")
+        .setLabel("🔒 Close Ticket")
+        .setStyle(ButtonStyle.Danger)
+    );
+
+    await ticketChannel.send({ embeds: [embed], components: [btns] });
     await interaction.reply({
-      content: "❌ Category **SUPPORT TICKETS** not found. Please create it first.",
+      content: `✅ Your support ticket has been created: ${ticketChannel}`,
       ephemeral: true,
     });
-    return;
   }
 
-  const existing = guild.channels.cache.find(
-    c => c.parentId === category.id && c.name === `ticket-${user.username.toLowerCase()}`
-  );
-  if (existing) {
-    await interaction.reply({
-      content: `❌ You already have an open ticket: ${existing}`,
-      ephemeral: true,
-    });
-    return;
+  if (interaction.customId === "close_ticket") {
+    await interaction.reply({ content: "🔒 Closing ticket...", ephemeral: true });
+    setTimeout(() => interaction.channel.delete().catch(() => {}), 2000);
   }
-
-  const ticketChannel = await guild.channels.create({
-    name: `ticket-${user.username}`,
-    type: 0,
-    parent: category.id,
-    topic: `Support ticket for ${user.tag}`,
-    permissionOverwrites: [
-      { id: guild.id, deny: ["ViewChannel"] },
-      { id: user.id, allow: ["ViewChannel", "SendMessages", "AttachFiles"] },
-    ],
-  });
-
-  const embed = new EmbedBuilder()
-    .setColor("#FFD700")
-    .setTitle("🎟️ V0 Support Ticket")
-    .setDescription(
-      `Hey ${user}, 👋\n\nPlease describe your issue below. A team member will assist you shortly.\n\n` +
-      "Click **🔒 Close Ticket** when you are done."
-    )
-    .setFooter({ text: "V0 | Support", iconURL: FOOTER_ICON });
-
-  const buttons = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("close_ticket")
-      .setLabel("🔒 Close Ticket")
-      .setStyle(ButtonStyle.Danger)
-  );
-
-  await ticketChannel.send({ embeds: [embed], components: [buttons] });
-  await interaction.reply({
-    content: `✅ Your support ticket has been created in ${category.name}: ${ticketChannel}`,
-    ephemeral: true,
-  });
 });
 
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isButton() || interaction.customId !== "close_ticket") return;
-  await interaction.reply({ content: "🔒 Closing ticket...", ephemeral: true });
-  setTimeout(() => interaction.channel.delete().catch(() => {}), 2000);
-});
-
-// === Verify System ===
+// === VERIFY SYSTEM ===
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton() || interaction.customId !== "verify_user") return;
   const guild = interaction.guild;
   const member = await guild.members.fetch(interaction.user.id);
   const verifiedRole = guild.roles.cache.find((r) => r.name === "💎 Verified");
-  if (!verifiedRole) {
-    await interaction.reply({
-      content: "❌ The '💎 Verified' role doesn't exist! Please create it first.",
+  if (!verifiedRole)
+    return interaction.reply({
+      content: "❌ The '💎 Verified' role doesn't exist!",
       ephemeral: true,
     });
-    return;
-  }
-  if (member.roles.cache.has(verifiedRole.id)) {
-    await interaction.reply({ content: "✅ You are already verified!", ephemeral: true });
-  } else {
-    await member.roles.add(verifiedRole);
-    await interaction.reply({ content: "💎 You have been verified successfully! Welcome to V0.", ephemeral: true });
+  if (member.roles.cache.has(verifiedRole.id))
+    return interaction.reply({
+      content: "✅ You are already verified!",
+      ephemeral: true,
+    });
+  await member.roles.add(verifiedRole);
+  await interaction.reply({
+    content: "💎 You have been verified successfully! Welcome to V0.",
+    ephemeral: true,
+  });
+});
+
+// === WELCOME SYSTEM ===
+client.on("guildMemberAdd", async (member) => {
+  try {
+    const welcomeChannel = member.guild.channels.cache.find(
+      (c) => c.name === "👋・welcome"
+    );
+    if (!welcomeChannel) return;
+    const verifyChannel = member.guild.channels.cache.find((c) =>
+      c.name.includes("verify")
+    );
+    const rulesChannel = member.guild.channels.cache.find((c) =>
+      c.name.includes("rules")
+    );
+    const verifyMention = verifyChannel ? `<#${verifyChannel.id}>` : "#verify";
+    const rulesMention = rulesChannel ? `<#${rulesChannel.id}>` : "#rules";
+    const embed = new EmbedBuilder()
+      .setColor("#FFD700")
+      .setTitle("👋 Welcome to V0!")
+      .setDescription(
+        `Hey ${member}, welcome to **V0**!\n\nPlease make sure to:\n✅ Verify yourself in ${verifyMention}\n📜 Read the rules in ${rulesMention}\n\nWe hope you enjoy our service 💎`
+      )
+      .setFooter({ text: "V0 | Welcome System", iconURL: FOOTER_ICON });
+    await welcomeChannel.send({ embeds: [embed] });
+  } catch (err) {
+    console.error("❌ Error sending welcome message:", err);
   }
 });
 
-// === Welcome System ===
-client.on("guildMemberAdd", async (member) => {
-  try {
-    const welcomeChannel = member.guild.channels.cache.find(c => c.name === "👋・welcome");
-    if (!welcomeChannel) return;
+// === SLAYER SYSTEM (verkürzt für Stabilität) ===
+const ticketCategories = {
+  revenant: "Revenant Slayer",
+  tarantula: "Tarantula Slayer",
+  sven: "Sven Slayer",
+  enderman: "Enderman Slayer",
+  blaze: "Blaze Slayer",
+  vampire: "Vampire Slayer",
+};
 
-    const verifyChannel = member.guild.channels.cache.find(c => c.name.includes("verify"));
-    const rulesChannel = member.guild.channels.cache.find(c => c.name.includes("rules"));
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isButton() || !interaction.customId.startsWith("open_ticket_"))
+    return;
+  const [_, __, slayer, tier] = interaction.customId.split("_");
+  const guild = interaction.guild;
+  const user = interaction.user;
+  const categoryName = ticketCategories[slayer];
+  const category = guild.channels.cache.find(
+    (c) => c.name === categoryName && c.type === 4
+  );
+  if (!category)
+    return interaction.reply({
+      content: `❌ Category ${categoryName} not found.`,
+      ephemeral: true,
+    });
+  const existing = guild.channels.cache.find(
+    (c) =>
+      c.parentId === category.id && c.name.includes(`${slayer}-t${tier}-${user.username}`)
+  );
+  if (existing)
+    return interaction.reply({
+      content: `❌ You already have an open ${slayer} ticket: ${existing}`,
+      ephemeral: true,
+    });
+  const allRoles = guild.roles.cache.filter((r) =>
+    r.name.toLowerCase().includes(slayer)
+  );
+  const visibleRoles = allRoles.filter((r) => {
+    const m = r.name.match(/tier\s*(\d+)/i);
+    if (!m) return false;
+    return parseInt(m[1]) >= parseInt(tier);
+  });
+  const ch = await guild.channels.create({
+    name: `${slayer}-t${tier}-${user.username}`,
+    type: 0,
+    parent: category,
+    permissionOverwrites: [
+      { id: guild.id, deny: ["ViewChannel"] },
+      { id: user.id, allow: ["ViewChannel", "SendMessages", "AttachFiles"] },
+      ...visibleRoles.map((r) => ({
+        id: r.id,
+        allow: ["ViewChannel", "SendMessages", "AttachFiles"],
+      })),
+    ],
+  });
+  const embed = new EmbedBuilder()
+    .setColor("#FFD700")
+    .setTitle(`${slayer} Tier ${tier} Ticket`)
+    .setDescription("Please wait for a carrier to claim your ticket.")
+    .setFooter({ text: `V0 | ${slayer} Slayer` });
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`close_${ch.id}`)
+      .setLabel("🔒 Close")
+      .setStyle(ButtonStyle.Danger)
+  );
+  await ch.send({
+    content: `|| @Tier ${tier} ${slayer} ||\n|| <@${user.id}> ||`,
+    embeds: [embed],
+    components: [row],
+  });
+  await interaction.reply({
+    content: `✅ Your ${slayer} Tier ${tier} ticket has been created: ${ch}`,
+    ephemeral: true,
+  });
+});
 
-    const verifyMention = verifyChannel ? `<#${verifyChannel.id}>` : "#verify";
-    const rulesMention = rulesChannel ? `<#${rulesChannel.id}>` : "#rules";
-
-    const welcomeEmbed = new EmbedBuilder()
-      .setColor("#FFD700")
-      .setTitle("👋 Welcome to V0 Carries!")
-      .setDescription(
-        `Hey ${member}, welcome to **V0 Carries**!\n\n` +
-        "We're glad to have you here. Please make sure to:\n" +
-        `✅ Verify yourself in ${verifyMention}\n` +
-        `📜 Read the rules in ${rulesMention}\n\n` +
-        "We hope you enjoy your stay 💎"
-      )
-      .setFooter({ text: "V0 | Welcome System", iconURL: FOOTER_ICON });
-
-    await welcomeChannel.send({ embeds: [welcomeEmbed] });
+client.login(TOKEN);
