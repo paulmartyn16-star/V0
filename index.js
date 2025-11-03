@@ -297,14 +297,14 @@ client.on("interactionCreate", async (interaction) => {
   }
 });
 
-// === Support Ticket System (V0 Carries Style) ===
+// === Support Ticket System (V0 Carries Style | Fixed Category) ===
 client.once("ready", async () => {
   const guild = client.guilds.cache.find(g => g.name === SERVER_NAME);
   if (!guild) return console.log("❌ Server not found for Support Panel.");
+
   const supportChannel = guild.channels.cache.find(c => c.name === "🎟️・support-ticket");
   if (!supportChannel) return console.log("❌ Support channel not found.");
 
-  // Neues modernes Support-Panel
   const supportEmbed = new EmbedBuilder()
     .setColor("#FFD700")
     .setTitle("💎 V0 Support")
@@ -321,6 +321,84 @@ client.once("ready", async () => {
       .setLabel("🎟️ Create Support Ticket")
       .setStyle(ButtonStyle.Primary)
   );
+
+  await supportChannel.bulkDelete(10).catch(() => {});
+  await supportChannel.send({ embeds: [supportEmbed], components: [supportBtn] });
+  console.log("✅ Support panel initialized.");
+});
+
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isButton() || interaction.customId !== "create_support_ticket") return;
+
+  const guild = interaction.guild;
+  const user = interaction.user;
+
+  // ✅ Kategorie "SUPPORT TICKETS" fix auswählen
+  const category = guild.channels.cache.find(
+    c => c.name.toUpperCase() === "SUPPORT TICKETS" && c.type === 4
+  );
+  if (!category) {
+    await interaction.reply({
+      content: "❌ Category **SUPPORT TICKETS** not found. Please create it first.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  // Prüfen, ob User schon ein Ticket offen hat
+  const existing = guild.channels.cache.find(c =>
+    c.parentId === category.id && c.name === `ticket-${user.username.toLowerCase()}`
+  );
+  if (existing) {
+    await interaction.reply({
+      content: `❌ You already have an open ticket: ${existing}`,
+      ephemeral: true,
+    });
+    return;
+  }
+
+  // Ticket erstellen in der festen Kategorie
+  const ticketChannel = await guild.channels.create({
+    name: `ticket-${user.username}`,
+    type: 0,
+    parent: category.id,
+    topic: `Support ticket for ${user.tag}`,
+    permissionOverwrites: [
+      { id: guild.id, deny: ["ViewChannel"] },
+      { id: user.id, allow: ["ViewChannel", "SendMessages", "AttachFiles"] },
+    ],
+  });
+
+  const embed = new EmbedBuilder()
+    .setColor("#FFD700")
+    .setTitle("🎟️ V0 Support Ticket")
+    .setDescription(
+      `Hey ${user}, 👋\n\nPlease describe your issue below. A team member will assist you shortly.\n\n` +
+      "Click **🔒 Close Ticket** when you are done."
+    )
+    .setFooter({ text: "V0 | Support", iconURL: FOOTER_ICON });
+
+  const buttons = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("close_ticket")
+      .setLabel("🔒 Close Ticket")
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  await ticketChannel.send({ embeds: [embed], components: [buttons] });
+  await interaction.reply({
+    content: `✅ Your support ticket has been created in ${category.name}: ${ticketChannel}`,
+    ephemeral: true,
+  });
+});
+
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isButton() || interaction.customId !== "close_ticket") return;
+
+  await interaction.reply({ content: "🔒 Closing ticket...", ephemeral: true });
+  setTimeout(() => interaction.channel.delete().catch(() => {}), 2000);
+});
+
 
   // Alte Nachrichten entfernen und neues Panel senden
   await supportChannel.bulkDelete(10).catch(() => {});
