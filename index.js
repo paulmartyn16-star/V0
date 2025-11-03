@@ -195,7 +195,6 @@ app.post("/reactionrole", isAuthenticated, async (req, res) => {
   }
 });
 
-// === Reaction Role Editing / Deleting ===
 app.post("/reactionrole/update", isAuthenticated, async (req, res) => {
   const { messageId, title, description, color, footer } = req.body;
   if (!rr[messageId]) return res.send("❌ Unknown message ID.");
@@ -297,34 +296,39 @@ client.on("interactionCreate", async (interaction) => {
   }
 });
 
-// === Support Ticket System (V0 Carries Style | Fixed Category) ===
+// === Support Ticket System (V0 Carries Style | Fixed Category + await fix) ===
 client.once("ready", async () => {
-  const guild = client.guilds.cache.find(g => g.name === SERVER_NAME);
-  if (!guild) return console.log("❌ Server not found for Support Panel.");
+  try {
+    const guild = client.guilds.cache.find(g => g.name === SERVER_NAME);
+    if (!guild) return console.log("❌ Server not found for Support Panel.");
 
-  const supportChannel = guild.channels.cache.find(c => c.name === "🎟️・support-ticket");
-  if (!supportChannel) return console.log("❌ Support channel not found.");
+    const supportChannel = guild.channels.cache.find(c => c.name === "🎟️・support-ticket");
+    if (!supportChannel) return console.log("❌ Support channel not found.");
 
-  const supportEmbed = new EmbedBuilder()
-    .setColor("#FFD700")
-    .setTitle("💎 V0 Support")
-    .setDescription(
-      "Need help or have a question about carries?\n\n" +
-      "Our support team is here for you! Click the button below to open a private ticket.\n\n" +
-      "⚠️ Only use this for **support-related issues.**"
-    )
-    .setFooter({ text: "V0 | Support System", iconURL: FOOTER_ICON });
+    const supportEmbed = new EmbedBuilder()
+      .setColor("#FFD700")
+      .setTitle("💎 V0 Support")
+      .setDescription(
+        "Need help or have a question about carries?\n\n" +
+        "Our support team is here for you! Click the button below to open a private ticket.\n\n" +
+        "⚠️ Only use this for **support-related issues.**"
+      )
+      .setFooter({ text: "V0 | Support System", iconURL: FOOTER_ICON });
 
-  const supportBtn = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("create_support_ticket")
-      .setLabel("🎟️ Create Support Ticket")
-      .setStyle(ButtonStyle.Primary)
-  );
+    const supportBtn = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("create_support_ticket")
+        .setLabel("🎟️ Create Support Ticket")
+        .setStyle(ButtonStyle.Primary)
+    );
 
-  await supportChannel.bulkDelete(10).catch(() => {});
-  await supportChannel.send({ embeds: [supportEmbed], components: [supportBtn] });
-  console.log("✅ Support panel initialized.");
+    await supportChannel.bulkDelete(10).catch(() => {});
+    await supportChannel.send({ embeds: [supportEmbed], components: [supportBtn] });
+
+    console.log("✅ Support panel initialized.");
+  } catch (err) {
+    console.error("❌ Error setting up support panel:", err);
+  }
 });
 
 client.on("interactionCreate", async (interaction) => {
@@ -333,7 +337,6 @@ client.on("interactionCreate", async (interaction) => {
   const guild = interaction.guild;
   const user = interaction.user;
 
-  // ✅ Kategorie "SUPPORT TICKETS" fix auswählen
   const category = guild.channels.cache.find(
     c => c.name.toUpperCase() === "SUPPORT TICKETS" && c.type === 4
   );
@@ -345,9 +348,8 @@ client.on("interactionCreate", async (interaction) => {
     return;
   }
 
-  // Prüfen, ob User schon ein Ticket offen hat
-  const existing = guild.channels.cache.find(c =>
-    c.parentId === category.id && c.name === `ticket-${user.username.toLowerCase()}`
+  const existing = guild.channels.cache.find(
+    c => c.parentId === category.id && c.name === `ticket-${user.username.toLowerCase()}`
   );
   if (existing) {
     await interaction.reply({
@@ -357,7 +359,6 @@ client.on("interactionCreate", async (interaction) => {
     return;
   }
 
-  // Ticket erstellen in der festen Kategorie
   const ticketChannel = await guild.channels.create({
     name: `ticket-${user.username}`,
     type: 0,
@@ -394,95 +395,8 @@ client.on("interactionCreate", async (interaction) => {
 
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton() || interaction.customId !== "close_ticket") return;
-
   await interaction.reply({ content: "🔒 Closing ticket...", ephemeral: true });
   setTimeout(() => interaction.channel.delete().catch(() => {}), 2000);
-});
-
-  // Alte Nachrichten entfernen und neues Panel senden
-  await supportChannel.bulkDelete(10).catch(() => {});
-  await supportChannel.send({ embeds: [supportEmbed], components: [supportBtn] });
-  console.log("✅ Support panel initialized.");
-});
-
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isButton() || interaction.customId !== "create_support_ticket") return;
-
-  const guild = interaction.guild;
-  const user = interaction.user;
-
-  // Prüfen, ob User schon ein Ticket hat
-  const existing = guild.channels.cache.find(c => c.name === `ticket-${user.username.toLowerCase()}`);
-  if (existing) {
-    await interaction.reply({
-      content: `❌ You already have an open ticket: ${existing}`,
-      ephemeral: true,
-    });
-    return;
-  }
-
-  const category = guild.channels.cache.find(c => c.name.toLowerCase().includes("support") && c.type === 4);
-
-  // Ticket erstellen
-  const ticketChannel = await guild.channels.create({
-    name: `ticket-${user.username}`,
-    type: 0,
-    parent: category ? category.id : null,
-    topic: `Support ticket for ${user.tag}`,
-    permissionOverwrites: [
-      { id: guild.id, deny: ["ViewChannel"] },
-      { id: user.id, allow: ["ViewChannel", "SendMessages", "AttachFiles"] },
-    ],
-  });
-
-  const embed = new EmbedBuilder()
-    .setColor("#FFD700")
-    .setTitle("🎟️ V0 Support Ticket")
-    .setDescription(
-      `Hey ${user}, 👋\n\nPlease describe your issue below. A team member will assist you shortly.\n\n` +
-      "Click **🔒 Close Ticket** when you are done."
-    )
-    .setFooter({ text: "V0 | Support", iconURL: FOOTER_ICON });
-
-  const buttons = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("close_ticket")
-      .setLabel("🔒 Close Ticket")
-      .setStyle(ButtonStyle.Danger)
-  );
-
-  await ticketChannel.send({ embeds: [embed], components: [buttons] });
-  await interaction.reply({
-    content: `✅ Your support ticket has been created: ${ticketChannel}`,
-    ephemeral: true,
-  });
-});
-
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isButton() || interaction.customId !== "close_ticket") return;
-
-  await interaction.reply({ content: "🔒 Closing ticket...", ephemeral: true });
-  setTimeout(() => interaction.channel.delete().catch(() => {}), 2000);
-});
-
-
-// === Close Ticket ===
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isButton()) return;
-  if (interaction.customId === "close_ticket") {
-    const confirmButton = new ButtonBuilder().setCustomId("confirm_close").setLabel("✅ Confirm Close").setStyle(ButtonStyle.Danger);
-    const cancelButton = new ButtonBuilder().setCustomId("cancel_close").setLabel("❌ Cancel").setStyle(ButtonStyle.Secondary);
-    const row = new ActionRowBuilder().addComponents(confirmButton, cancelButton);
-    await interaction.reply({ content: "Are you sure you want to close this ticket?", components: [row], ephemeral: true });
-  }
-  if (interaction.customId === "confirm_close") {
-    const channel = interaction.channel;
-    await interaction.reply({ content: "🔒 Ticket closed successfully.", ephemeral: true });
-    await channel.delete().catch((err) => console.error("Error deleting ticket:", err));
-  }
-  if (interaction.customId === "cancel_close") {
-    await interaction.reply({ content: "❎ Ticket closure cancelled.", ephemeral: true });
-  }
 });
 
 // === Verify System ===
@@ -531,241 +445,3 @@ client.on("guildMemberAdd", async (member) => {
       .setFooter({ text: "V0 | Welcome System", iconURL: FOOTER_ICON });
 
     await welcomeChannel.send({ embeds: [welcomeEmbed] });
-  } catch (err) {
-    console.error("❌ Error sending welcome message:", err);
-  }
-});
-
-
-// === LOGIN ===
-client.login(TOKEN);
-
-// =====================================================
-// 🧩 V0 Slayer Ticket System (Panels, Claim, Sortierung)
-// =====================================================
-
-const ticketCategories = {
-  revenant: "Revenant Slayer",
-  tarantula: "Tarantula Slayer",
-  sven: "Sven Slayer",
-  enderman: "Enderman Slayer",
-  blaze: "Blaze Slayer",
-  vampire: "Vampire Slayer",
-};
-
-// === INTERACTION HANDLER ===
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isButton()) return;
-
-  const id = interaction.customId;
-  const guild = interaction.guild;
-
-  // =====================================================
-  // 🎫 TICKET ERSTELLEN
-  // =====================================================
-  if (id.startsWith("open_ticket_")) {
-    const [_, __, slayerName, tier] = id.split("_");
-    const user = interaction.user;
-    const categoryName = ticketCategories[slayerName];
-    const category = guild.channels.cache.find(
-      (c) => c.name === categoryName && c.type === 4
-    );
-
-    if (!category) {
-      await interaction.reply({
-        content: `❌ Category "${categoryName}" not found!`,
-        ephemeral: true,
-      });
-      return;
-    }
-
-    // Prüfen ob User schon ein Ticket für diesen Slayer hat
-    const existing = guild.channels.cache.find(
-      (c) =>
-        c.parentId === category.id &&
-        c.name.includes(`${slayerName}-t`) &&
-        c.name.includes(user.username.toLowerCase())
-    );
-    if (existing) {
-      await interaction.reply({
-        content: `❌ You already have an open ${slayerName} ticket: ${existing}`,
-        ephemeral: true,
-      });
-      return;
-    }
-
-    // Sichtbare Rollen (gleicher Slayer, Tier >= aktuellem Tier)
-    const allRoles = guild.roles.cache.filter((r) =>
-      r.name.toLowerCase().includes(slayerName)
-    );
-    const visibleRoles = allRoles.filter((r) => {
-      const match = r.name.match(/tier\s*(\d+)/i);
-      if (!match) return false;
-      const tierNum = parseInt(match[1]);
-      return tierNum >= parseInt(tier);
-    });
-
-    // === Ticket erstellen ===
-    const ticketChannel = await guild.channels.create({
-      name: `${slayerName}-t${tier}-${user.username}`,
-      type: 0,
-      parent: category,
-      topic: `${slayerName} Tier ${tier} Carry for ${user.tag}`,
-      permissionOverwrites: [
-        { id: guild.id, deny: ["ViewChannel"] },
-        { id: user.id, allow: ["ViewChannel", "SendMessages", "AttachFiles"] },
-        ...visibleRoles.map((r) => ({
-          id: r.id,
-          allow: ["ViewChannel", "SendMessages", "AttachFiles"],
-        })),
-      ],
-    });
-
-    // === Ticket Nachricht ===
-    const spoilerText = `|| @Tier ${tier} ${capitalize(slayerName)} ||\n|| <@${user.id}> ||`;
-    const embed = new EmbedBuilder()
-      .setColor("#FFD700")
-      .setTitle(`${capitalize(slayerName)} Tier ${tier} Ticket`)
-      .setDescription("Please wait for a carrier to claim your ticket.")
-      .setFooter({ text: `V0 | ${capitalize(slayerName)} Slayer` });
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`claim_${ticketChannel.id}`)
-        .setLabel("✅ Claim")
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId(`unclaim_${ticketChannel.id}`)
-        .setLabel("🔄 Unclaim")
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId(`close_${ticketChannel.id}`)
-        .setLabel("🔒 Close")
-        .setStyle(ButtonStyle.Danger)
-    );
-
-    await ticketChannel.send({
-      content: spoilerText,
-      embeds: [embed],
-      components: [row],
-    });
-
-    await interaction.reply({
-      content: `✅ Your ${capitalize(slayerName)} Tier ${tier} ticket has been created: ${ticketChannel}`,
-      ephemeral: true,
-    });
-
-    // Nach Erstellung sortieren
-    sortTickets(category);
-  }
-
-  // =====================================================
-  // 🎯 CLAIM / UNCLAIM / CLOSE
-  // =====================================================
-  else if (id.startsWith("claim_") || id.startsWith("unclaim_") || id.startsWith("close_")) {
-    const channelId = id.split("_")[1];
-    const channel = guild.channels.cache.get(channelId);
-    if (!channel) return;
-
-    // === CLAIM ===
-    if (id.startsWith("claim_")) {
-      const [slayerName, tier] = channel.name.split("-t");
-      const match = tier?.match(/\d/);
-      if (!match) return;
-      const ticketTier = parseInt(match[0]);
-
-      const roles = guild.roles.cache.filter((r) =>
-        r.name.toLowerCase().includes(slayerName)
-      );
-      const allowed = roles.filter((r) => {
-        const match = r.name.match(/tier\s*(\d+)/i);
-        if (!match) return false;
-        const tierNum = parseInt(match[1]);
-        return tierNum >= ticketTier;
-      });
-
-      const member = await guild.members.fetch(interaction.user.id);
-      const hasPermission = member.roles.cache.some((r) => allowed.has(r.id));
-
-      if (!hasPermission) {
-        await interaction.reply({
-          content: "❌ You don't have permission to claim this ticket.",
-          ephemeral: true,
-        });
-        return;
-      }
-
-      await interaction.reply({
-        content: `✅ Ticket claimed by <@${interaction.user.id}>.`,
-      });
-
-      // Schreibrechte anpassen
-      const overwrites = channel.permissionOverwrites.cache;
-      overwrites.forEach(async (po) => {
-        if (po.allow.has("SendMessages") && po.id !== interaction.user.id) {
-          await channel.permissionOverwrites.edit(po.id, { SendMessages: false });
-        }
-      });
-      await channel.permissionOverwrites.edit(interaction.user.id, {
-        SendMessages: true,
-      });
-    }
-
-    // === UNCLAIM ===
-    if (id.startsWith("unclaim_")) {
-      await interaction.reply({
-        content: `🔄 Ticket unclaimed by <@${interaction.user.id}>.`,
-      });
-
-      const [slayerName, tier] = channel.name.split("-t");
-      const match = tier?.match(/\d/);
-      if (!match) return;
-      const ticketTier = parseInt(match[0]);
-
-      const roles = guild.roles.cache.filter((r) =>
-        r.name.toLowerCase().includes(slayerName)
-      );
-      const allowed = roles.filter((r) => {
-        const match = r.name.match(/tier\s*(\d+)/i);
-        if (!match) return false;
-        const tierNum = parseInt(match[1]);
-        return tierNum >= ticketTier;
-      });
-
-      allowed.forEach(async (r) => {
-        await channel.permissionOverwrites.edit(r.id, { SendMessages: true });
-      });
-    }
-
-    // === CLOSE ===
-    if (id.startsWith("close_")) {
-      await interaction.reply({
-        content: "🔒 Closing ticket...",
-        ephemeral: true,
-      });
-      setTimeout(() => channel.delete().catch(() => {}), 2000);
-    }
-  }
-});
-
-// === Ticket Sortierung ===
-async function sortTickets(category) {
-  const channels = Array.from(category.children.cache.values()).filter(
-    (ch) => ch.name.includes("-t")
-  );
-
-  channels.sort((a, b) => {
-    const tierA = parseInt(a.name.match(/-t(\d)/)?.[1] || 0);
-    const tierB = parseInt(b.name.match(/-t(\d)/)?.[1] || 0);
-    return tierB - tierA; // höchste Tiers oben
-  });
-
-  for (let i = 0; i < channels.length; i++) {
-    await channels[i].setPosition(i);
-  }
-}
-
-function capitalize(str) {
-  return str.charAt(0).toUpperCase() + str.slice(1);
-}
- 
