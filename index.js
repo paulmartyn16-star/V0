@@ -181,8 +181,7 @@ client.once("ready", async () => {
       .setColor("#FFD700")
       .setTitle("💎 V0 Support")
       .setDescription(
-        "Need help or have a question about carries?\n\n" +
-          "Our support team is here for you! Click below to open a ticket.\n\n⚠️ Only use this for **support-related issues.**"
+        "Need help or have a question about carries?\n\nOur support team is here for you! Click below to open a ticket.\n\n⚠️ Only use this for **support-related issues.**"
       )
       .setFooter({ text: "V0 | Support System", iconURL: FOOTER_ICON });
     const btn = new ActionRowBuilder().addComponents(
@@ -196,11 +195,10 @@ client.once("ready", async () => {
   }
 });
 
-// === INTERACTIONS ===
+// === SUPPORT & VERIFY & WELCOME ===
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
 
-  // === SUPPORT SYSTEM ===
   if (interaction.customId === "create_support_ticket") {
     const guild = interaction.guild;
     const user = interaction.user;
@@ -260,32 +258,29 @@ client.on("interactionCreate", async (interaction) => {
     await interaction.reply({ content: "🔒 Closing ticket...", ephemeral: true });
     setTimeout(() => interaction.channel.delete().catch(() => {}), 2000);
   }
-});
 
-// === VERIFY SYSTEM ===
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isButton() || interaction.customId !== "verify_user") return;
-  const guild = interaction.guild;
-  const member = await guild.members.fetch(interaction.user.id);
-  const verifiedRole = guild.roles.cache.find((r) => r.name === "💎 Verified");
-  if (!verifiedRole)
-    return interaction.reply({
-      content: "❌ The '💎 Verified' role doesn't exist!",
+  if (interaction.customId === "verify_user") {
+    const guild = interaction.guild;
+    const member = await guild.members.fetch(interaction.user.id);
+    const verifiedRole = guild.roles.cache.find((r) => r.name === "💎 Verified");
+    if (!verifiedRole)
+      return interaction.reply({
+        content: "❌ The '💎 Verified' role doesn't exist!",
+        ephemeral: true,
+      });
+    if (member.roles.cache.has(verifiedRole.id))
+      return interaction.reply({
+        content: "✅ You are already verified!",
+        ephemeral: true,
+      });
+    await member.roles.add(verifiedRole);
+    await interaction.reply({
+      content: "💎 You have been verified successfully! Welcome to V0.",
       ephemeral: true,
     });
-  if (member.roles.cache.has(verifiedRole.id))
-    return interaction.reply({
-      content: "✅ You are already verified!",
-      ephemeral: true,
-    });
-  await member.roles.add(verifiedRole);
-  await interaction.reply({
-    content: "💎 You have been verified successfully! Welcome to V0.",
-    ephemeral: true,
-  });
+  }
 });
 
-// === WELCOME SYSTEM ===
 client.on("guildMemberAdd", async (member) => {
   try {
     const welcomeChannel = member.guild.channels.cache.find(
@@ -313,7 +308,7 @@ client.on("guildMemberAdd", async (member) => {
   }
 });
 
-// === SLAYER SYSTEM (verkürzt für Stabilität) ===
+// === SLAYER SYSTEM (Claim/Unclaim/Close) ===
 const ticketCategories = {
   revenant: "Revenant Slayer",
   tarantula: "Tarantula Slayer",
@@ -324,70 +319,98 @@ const ticketCategories = {
 };
 
 client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isButton() || !interaction.customId.startsWith("open_ticket_"))
-    return;
-  const [_, __, slayer, tier] = interaction.customId.split("_");
+  if (!interaction.isButton()) return;
+
+  const id = interaction.customId;
   const guild = interaction.guild;
   const user = interaction.user;
-  const categoryName = ticketCategories[slayer];
-  const category = guild.channels.cache.find(
-    (c) => c.name === categoryName && c.type === 4
-  );
-  if (!category)
-    return interaction.reply({
-      content: `❌ Category ${categoryName} not found.`,
+
+  // === Ticket eröffnen ===
+  if (id.startsWith("open_ticket_")) {
+    const [_, __, slayer, tier] = id.split("_");
+    const categoryName = ticketCategories[slayer];
+    const category = guild.channels.cache.find(
+      (c) => c.name === categoryName && c.type === 4
+    );
+    if (!category)
+      return interaction.reply({
+        content: `❌ Category "${categoryName}" not found!`,
+        ephemeral: true,
+      });
+
+    const existing = guild.channels.cache.find(
+      (c) =>
+        c.parentId === category.id &&
+        c.name.includes(`${slayer}-t${tier}-${user.username}`)
+    );
+    if (existing)
+      return interaction.reply({
+        content: `❌ You already have an open ${slayer} ticket: ${existing}`,
+        ephemeral: true,
+      });
+
+    const ch = await guild.channels.create({
+      name: `${slayer}-t${tier}-${user.username}`,
+      type: 0,
+      parent: category,
+      permissionOverwrites: [
+        { id: guild.id, deny: ["ViewChannel"] },
+        { id: user.id, allow: ["ViewChannel", "SendMessages", "AttachFiles"] },
+      ],
+    });
+
+    const embed = new EmbedBuilder()
+      .setColor("#FFD700")
+      .setTitle(`${slayer} Tier ${tier} Ticket`)
+      .setDescription("Please wait for a carrier to claim your ticket.")
+      .setFooter({ text: `V0 | ${slayer} Slayer` });
+
+    const buttons = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`claim_${ch.id}`)
+        .setLabel("✅ Claim")
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`unclaim_${ch.id}`)
+        .setLabel("🔄 Unclaim")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`close_${ch.id}`)
+        .setLabel("🔒 Close")
+        .setStyle(ButtonStyle.Danger)
+    );
+
+    await ch.send({
+      content: `|| @Tier ${tier} ${slayer} ||\n|| <@${user.id}> ||`,
+      embeds: [embed],
+      components: [buttons],
+    });
+    await interaction.reply({
+      content: `✅ Your ${slayer} Tier ${tier} ticket has been created: ${ch}`,
       ephemeral: true,
     });
-  const existing = guild.channels.cache.find(
-    (c) =>
-      c.parentId === category.id && c.name.includes(`${slayer}-t${tier}-${user.username}`)
-  );
-  if (existing)
-    return interaction.reply({
-      content: `❌ You already have an open ${slayer} ticket: ${existing}`,
+  }
+
+  // === Claim / Unclaim / Close ===
+  if (id.startsWith("claim_")) {
+    await interaction.reply({
+      content: `✅ Ticket claimed by <@${user.id}>.`,
+    });
+  }
+
+  if (id.startsWith("unclaim_")) {
+    await interaction.reply({
+      content: `🔄 Ticket unclaimed by <@${user.id}>.`,
+    });
+  }
+
+  if (id.startsWith("close_")) {
+    await interaction.reply({
+      content: "🔒 Closing ticket...",
       ephemeral: true,
     });
-  const allRoles = guild.roles.cache.filter((r) =>
-    r.name.toLowerCase().includes(slayer)
-  );
-  const visibleRoles = allRoles.filter((r) => {
-    const m = r.name.match(/tier\s*(\d+)/i);
-    if (!m) return false;
-    return parseInt(m[1]) >= parseInt(tier);
-  });
-  const ch = await guild.channels.create({
-    name: `${slayer}-t${tier}-${user.username}`,
-    type: 0,
-    parent: category,
-    permissionOverwrites: [
-      { id: guild.id, deny: ["ViewChannel"] },
-      { id: user.id, allow: ["ViewChannel", "SendMessages", "AttachFiles"] },
-      ...visibleRoles.map((r) => ({
-        id: r.id,
-        allow: ["ViewChannel", "SendMessages", "AttachFiles"],
-      })),
-    ],
-  });
-  const embed = new EmbedBuilder()
-    .setColor("#FFD700")
-    .setTitle(`${slayer} Tier ${tier} Ticket`)
-    .setDescription("Please wait for a carrier to claim your ticket.")
-    .setFooter({ text: `V0 | ${slayer} Slayer` });
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`close_${ch.id}`)
-      .setLabel("🔒 Close")
-      .setStyle(ButtonStyle.Danger)
-  );
-  await ch.send({
-    content: `|| @Tier ${tier} ${slayer} ||\n|| <@${user.id}> ||`,
-    embeds: [embed],
-    components: [row],
-  });
-  await interaction.reply({
-    content: `✅ Your ${slayer} Tier ${tier} ticket has been created: ${ch}`,
-    ephemeral: true,
-  });
+    setTimeout(() => interaction.channel.delete().catch(() => {}), 2000);
+  }
 });
 
 client.login(TOKEN);
