@@ -297,37 +297,97 @@ client.on("interactionCreate", async (interaction) => {
   }
 });
 
-// === Support Ticket System ===
+// === Support Ticket System (V0 Carries Style) ===
+client.once("ready", async () => {
+  const guild = client.guilds.cache.find(g => g.name === SERVER_NAME);
+  if (!guild) return console.log("❌ Server not found for Support Panel.");
+  const supportChannel = guild.channels.cache.find(c => c.name === "🎟️・support-ticket");
+  if (!supportChannel) return console.log("❌ Support channel not found.");
+
+  // Neues modernes Support-Panel
+  const supportEmbed = new EmbedBuilder()
+    .setColor("#FFD700")
+    .setTitle("💎 V0 Support")
+    .setDescription(
+      "Need help or have a question about carries?\n\n" +
+      "Our support team is here for you! Click the button below to open a private ticket.\n\n" +
+      "⚠️ Only use this for **support-related issues.**"
+    )
+    .setFooter({ text: "V0 | Support System", iconURL: FOOTER_ICON });
+
+  const supportBtn = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("create_support_ticket")
+      .setLabel("🎟️ Create Support Ticket")
+      .setStyle(ButtonStyle.Primary)
+  );
+
+  // Alte Nachrichten entfernen und neues Panel senden
+  await supportChannel.bulkDelete(10).catch(() => {});
+  await supportChannel.send({ embeds: [supportEmbed], components: [supportBtn] });
+  console.log("✅ Support panel initialized.");
+});
+
 client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isButton()) return;
-  if (interaction.customId !== "create_support_ticket") return;
+  if (!interaction.isButton() || interaction.customId !== "create_support_ticket") return;
+
   const guild = interaction.guild;
   const user = interaction.user;
-  const existing = guild.channels.cache.find((c) => c.name === `ticket-${user.username.toLowerCase()}`);
+
+  // Prüfen, ob User schon ein Ticket hat
+  const existing = guild.channels.cache.find(c => c.name === `ticket-${user.username.toLowerCase()}`);
   if (existing) {
-    await interaction.reply({ content: `❌ You already have an open ticket: ${existing}`, ephemeral: true });
+    await interaction.reply({
+      content: `❌ You already have an open ticket: ${existing}`,
+      ephemeral: true,
+    });
     return;
   }
+
+  const category = guild.channels.cache.find(c => c.name.toLowerCase().includes("support") && c.type === 4);
+
+  // Ticket erstellen
   const ticketChannel = await guild.channels.create({
     name: `ticket-${user.username}`,
     type: 0,
-    parent: CATEGORY_ID,
+    parent: category ? category.id : null,
     topic: `Support ticket for ${user.tag}`,
     permissionOverwrites: [
       { id: guild.id, deny: ["ViewChannel"] },
       { id: user.id, allow: ["ViewChannel", "SendMessages", "AttachFiles"] },
     ],
   });
-  const ticketEmbed = new EmbedBuilder()
+
+  const embed = new EmbedBuilder()
     .setColor("#FFD700")
     .setTitle("🎟️ V0 Support Ticket")
-    .setDescription(`Hello ${user}, 👋\n\nPlease describe your issue below. A support member will assist you shortly.\n\nClick **🔒 Close Ticket** when you're done.`)
+    .setDescription(
+      `Hey ${user}, 👋\n\nPlease describe your issue below. A team member will assist you shortly.\n\n` +
+      "Click **🔒 Close Ticket** when you are done."
+    )
     .setFooter({ text: "V0 | Support", iconURL: FOOTER_ICON });
-  const closeButton = new ButtonBuilder().setCustomId("close_ticket").setLabel("🔒 Close Ticket").setStyle(ButtonStyle.Secondary);
-  const closeRow = new ActionRowBuilder().addComponents(closeButton);
-  await ticketChannel.send({ embeds: [ticketEmbed], components: [closeRow] });
-  await interaction.reply({ content: `✅ Your support ticket has been created: ${ticketChannel}`, ephemeral: true });
+
+  const buttons = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("close_ticket")
+      .setLabel("🔒 Close Ticket")
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  await ticketChannel.send({ embeds: [embed], components: [buttons] });
+  await interaction.reply({
+    content: `✅ Your support ticket has been created: ${ticketChannel}`,
+    ephemeral: true,
+  });
 });
+
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isButton() || interaction.customId !== "close_ticket") return;
+
+  await interaction.reply({ content: "🔒 Closing ticket...", ephemeral: true });
+  setTimeout(() => interaction.channel.delete().catch(() => {}), 2000);
+});
+
 
 // === Close Ticket ===
 client.on("interactionCreate", async (interaction) => {
@@ -372,22 +432,33 @@ client.on("interactionCreate", async (interaction) => {
 // === Welcome System ===
 client.on("guildMemberAdd", async (member) => {
   try {
-    const channel = member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
-    if (!channel) return;
-    const verifyChannel = member.guild.channels.cache.find((c) => c.name === "✅・verify");
-    const rulesChannel = member.guild.channels.cache.find((c) => c.name.includes("rules"));
-    const verifyMention = verifyChannel ? `<#${verifyChannel.id}>` : "#✅・verify";
+    const welcomeChannel = member.guild.channels.cache.find(c => c.name === "👋・welcome");
+    if (!welcomeChannel) return;
+
+    const verifyChannel = member.guild.channels.cache.find(c => c.name.includes("verify"));
+    const rulesChannel = member.guild.channels.cache.find(c => c.name.includes("rules"));
+
+    const verifyMention = verifyChannel ? `<#${verifyChannel.id}>` : "#verify";
     const rulesMention = rulesChannel ? `<#${rulesChannel.id}>` : "#rules";
-    const embed = new EmbedBuilder()
+
+    const welcomeEmbed = new EmbedBuilder()
       .setColor("#FFD700")
-      .setTitle("👋 Welcome to V0!")
-      .setDescription(`Hey ${member}, welcome to **V0**!\n\nWe're glad to have you here. Please make sure to:\n✅ Verify yourself in ${verifyMention}\n📜 Read the rules in ${rulesMention}\n\nWe hope you enjoy our service 💎`)
+      .setTitle("👋 Welcome to V0 Carries!")
+      .setDescription(
+        `Hey ${member}, welcome to **V0 Carries**!\n\n` +
+        "We're glad to have you here. Please make sure to:\n" +
+        `✅ Verify yourself in ${verifyMention}\n` +
+        `📜 Read the rules in ${rulesMention}\n\n` +
+        "We hope you enjoy your stay 💎"
+      )
       .setFooter({ text: "V0 | Welcome System", iconURL: FOOTER_ICON });
-    await channel.send({ embeds: [embed] });
+
+    await welcomeChannel.send({ embeds: [welcomeEmbed] });
   } catch (err) {
     console.error("❌ Error sending welcome message:", err);
   }
 });
+
 
 // === LOGIN ===
 client.login(TOKEN);
