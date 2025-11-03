@@ -399,7 +399,6 @@ client.on("interactionCreate", async (interaction) => {
   setTimeout(() => interaction.channel.delete().catch(() => {}), 2000);
 });
 
-
   // Alte Nachrichten entfernen und neues Panel senden
   await supportChannel.bulkDelete(10).catch(() => {});
   await supportChannel.send({ embeds: [supportEmbed], components: [supportBtn] });
