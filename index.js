@@ -194,11 +194,11 @@ client.once("ready", async () => {
     console.log("✅ Support panel initialized.");
   }
 });
-
-// === SUPPORT & VERIFY & WELCOME ===
+// === SUPPORT, VERIFY & WELCOME ===
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
 
+  // === SUPPORT SYSTEM ===
   if (interaction.customId === "create_support_ticket") {
     const guild = interaction.guild;
     const user = interaction.user;
@@ -254,11 +254,18 @@ client.on("interactionCreate", async (interaction) => {
     });
   }
 
+  // === CLOSE SUPPORT TICKET ===
   if (interaction.customId === "close_ticket") {
-    await interaction.reply({ content: "🔒 Closing ticket...", ephemeral: true });
-    setTimeout(() => interaction.channel.delete().catch(() => {}), 2000);
+    if (interaction.channel.name.startsWith("ticket-")) {
+      await interaction.reply({
+        content: "🔒 Closing ticket...",
+        ephemeral: true,
+      });
+      setTimeout(() => interaction.channel.delete().catch(() => {}), 2000);
+    }
   }
 
+  // === VERIFY SYSTEM ===
   if (interaction.customId === "verify_user") {
     const guild = interaction.guild;
     const member = await guild.members.fetch(interaction.user.id);
@@ -281,6 +288,7 @@ client.on("interactionCreate", async (interaction) => {
   }
 });
 
+// === WELCOME SYSTEM ===
 client.on("guildMemberAdd", async (member) => {
   try {
     const welcomeChannel = member.guild.channels.cache.find(
@@ -308,7 +316,7 @@ client.on("guildMemberAdd", async (member) => {
   }
 });
 
-// === SLAYER SYSTEM (Claim/Unclaim/Close) ===
+// === SLAYER SYSTEM ===
 const ticketCategories = {
   revenant: "Revenant Slayer",
   tarantula: "Tarantula Slayer",
@@ -320,12 +328,11 @@ const ticketCategories = {
 
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isButton()) return;
-
   const id = interaction.customId;
   const guild = interaction.guild;
   const user = interaction.user;
 
-  // === Ticket eröffnen ===
+  // === Slayer Ticket erstellen ===
   if (id.startsWith("open_ticket_")) {
     const [_, __, slayer, tier] = id.split("_");
     const categoryName = ticketCategories[slayer];
@@ -385,30 +392,24 @@ client.on("interactionCreate", async (interaction) => {
       embeds: [embed],
       components: [buttons],
     });
+
     await interaction.reply({
       content: `✅ Your ${slayer} Tier ${tier} ticket has been created: ${ch}`,
       ephemeral: true,
     });
   }
 
-  // === Claim / Unclaim / Close ===
+  // === Slayer Claim / Unclaim / Close ===
   if (id.startsWith("claim_")) {
-    await interaction.reply({
-      content: `✅ Ticket claimed by <@${user.id}>.`,
-    });
+    await interaction.reply({ content: `✅ Ticket claimed by <@${user.id}>.` });
   }
 
   if (id.startsWith("unclaim_")) {
-    await interaction.reply({
-      content: `🔄 Ticket unclaimed by <@${user.id}>.`,
-    });
+    await interaction.reply({ content: `🔄 Ticket unclaimed by <@${user.id}>.` });
   }
 
   if (id.startsWith("close_")) {
-    await interaction.reply({
-      content: "🔒 Closing ticket...",
-      ephemeral: true,
-    });
+    await interaction.reply({ content: "🔒 Closing ticket...", ephemeral: true });
     setTimeout(() => interaction.channel.delete().catch(() => {}), 2000);
   }
 });
