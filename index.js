@@ -193,6 +193,36 @@ client.once("ready", async () => {
     await supportChannel.send({ embeds: [embed], components: [btn] });
     console.log("✅ Support panel initialized.");
   }
+    // === VERIFY PANEL (Dauerhaft, kein Neusenden) ===
+  const verifyChannel = guild.channels.cache.find((c) => c.name.includes("verify"));
+  if (verifyChannel) {
+    // Prüfen, ob bereits ein Verify-Panel existiert
+    const messages = await verifyChannel.messages.fetch({ limit: 10 }).catch(() => null);
+    const hasPanel = messages && messages.some(m => m.embeds.length && m.embeds[0].title === "💎 Verify to Access V0");
+
+    if (!hasPanel) {
+      const verifyEmbed = new EmbedBuilder()
+        .setColor("#00FF99")
+        .setTitle("💎 Verify to Access V0")
+        .setDescription(
+          "Welcome to **V0 Carries!**\n\nClick **Verify Me** below to get full access to the server."
+        )
+        .setFooter({ text: "V0 | Verification System", iconURL: FOOTER_ICON });
+
+      const verifyBtn = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("verify_user")
+          .setLabel("✅ Verify Me")
+          .setStyle(ButtonStyle.Success)
+      );
+
+      await verifyChannel.send({ embeds: [verifyEmbed], components: [verifyBtn] });
+      console.log("✅ Verify panel created (first time).");
+    } else {
+      console.log("✅ Verify panel already exists, no need to resend.");
+    }
+  }
+
 });
 // === SUPPORT, VERIFY & WELCOME ===
 client.on("interactionCreate", async (interaction) => {
