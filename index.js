@@ -274,27 +274,30 @@ if (interaction.customId === "close_ticket") {
   }
 }
 
-  // === VERIFY SYSTEM ===
-  if (interaction.customId === "verify_user") {
-    const guild = interaction.guild;
-    const member = await guild.members.fetch(interaction.user.id);
-    const verifiedRole = guild.roles.cache.find((r) => r.name === "💎 Verified");
-    if (!verifiedRole)
-      return interaction.reply({
-        content: "❌ The '💎 Verified' role doesn't exist!",
-        ephemeral: true,
-      });
-    if (member.roles.cache.has(verifiedRole.id))
-      return interaction.reply({
-        content: "✅ You are already verified!",
-        ephemeral: true,
-      });
-    await member.roles.add(verifiedRole);
-    await interaction.reply({
-      content: "💎 You have been verified successfully! Welcome to V0.",
+// === VERIFY SYSTEM (V0 Carries Style) ===
+if (interaction.customId === "verify_user") {
+  const guild = interaction.guild;
+  const member = await guild.members.fetch(interaction.user.id);
+  const verifiedRole = guild.roles.cache.find((r) => r.name === "💎 Verified");
+
+  if (!verifiedRole)
+    return interaction.reply({
+      content: "❌ The '💎 Verified' role doesn't exist!",
       ephemeral: true,
     });
-  }
+
+  if (member.roles.cache.has(verifiedRole.id))
+    return interaction.reply({
+      content: "✅ You are already verified!",
+      ephemeral: true,
+    });
+
+  await member.roles.add(verifiedRole);
+  await interaction.reply({
+    content: "💎 You have been verified successfully! Welcome to **V0 Carries**.",
+    ephemeral: true,
+  });
+}
 });
 
 // === WELCOME SYSTEM ===
