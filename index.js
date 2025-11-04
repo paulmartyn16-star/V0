@@ -254,16 +254,25 @@ client.on("interactionCreate", async (interaction) => {
     });
   }
 
-  // === CLOSE SUPPORT TICKET ===
-  if (interaction.customId === "close_ticket") {
-    if (interaction.channel.name.startsWith("ticket-")) {
+  // === CLOSE SUPPORT TICKET (Stabiler Fix) ===
+if (interaction.customId === "close_ticket") {
+  if (interaction.channel.name.startsWith("ticket-")) {
+    try {
+      // Neue sichere Antwortmethode (Flags statt ephemeral)
       await interaction.reply({
         content: "🔒 Closing ticket...",
-        ephemeral: true,
-      });
-      setTimeout(() => interaction.channel.delete().catch(() => {}), 2000);
+        flags: 64 // ersetzt ephemeral: true
+      }).catch(() => {}); // Ignoriere Discord Timeout Fehler
+
+      // Channel nach 2 Sekunden löschen
+      setTimeout(() => {
+        interaction.channel.delete().catch(() => {});
+      }, 2000);
+    } catch (err) {
+      console.error("❌ Error closing ticket:", err);
     }
   }
+}
 
   // === VERIFY SYSTEM ===
   if (interaction.customId === "verify_user") {
