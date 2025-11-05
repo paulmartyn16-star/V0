@@ -236,7 +236,11 @@ client.once("ready", async () => {
 
   // --- Verify panel: create only if missing and in a verify channel ---
   try {
-    const verifyChannel = guild.channels.cache.find(c => c.name.toLowerCase().includes("verify") && c.type === 0);
+// finds channel like "verify", "✅・verify", "✔verify", etc.
+const verifyChannel = guild.channels.cache.find(
+  c => c.type === 0 && c.name.replace(/[^\w\s]/gi, "").toLowerCase().includes("verify")
+);
+
     if (verifyChannel) {
       const messages = await verifyChannel.messages.fetch({ limit: 50 }).catch(()=>null);
       const hasVerify = messages && messages.some(m => m.embeds?.length && m.embeds[0].title === "💎 Verify to Access V0");
