@@ -572,3 +572,4 @@ function capitalize(s) { return s?.charAt(0)?.toUpperCase() + s?.slice(1); }
 
 // === LOGIN ===
 client.login(TOKEN).catch(err => console.error("Login failed:", err));
+ 
